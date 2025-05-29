@@ -77,27 +77,28 @@ df_all = pd.merge(df_hr_daily, df_extra, on="date", how="outer").sort_values("da
 
 fig_combo = go.Figure()
 
-if not df_all.empty:
-    if "bpm" in df_all.columns:
-        fig_combo.add_trace(go.Scatter(x=df_all["date"], y=df_all["bpm"],
-                                       mode='lines+markers', name="BPM", yaxis="y1"))
-    if "respiratory_rate" in df_all.columns:
-        fig_combo.add_trace(go.Scatter(x=df_all["date"], y=df_all["respiratory_rate"],
-                                       mode='lines+markers', name="Resp/min", yaxis="y2"))
-    if "temperature_deviation" in df_all.columns:
-        fig_combo.add_trace(go.Scatter(x=df_all["date"], y=df_all["temperature_deviation"],
-                                       mode='lines+markers', name="Temp Δ (°C)", yaxis="y3"))
+# BPM y Respiración (eje Y1)
+if "bpm" in df_all.columns:
+    fig_combo.add_trace(go.Scatter(x=df_all["date"], y=df_all["bpm"],
+                                   mode='lines+markers', name="BPM", yaxis="y1"))
 
-    fig_combo.update_layout(
-        title="📊 HR, Respiraciones y Temperatura Nocturna",
-        xaxis=dict(title="Fecha"),
-        yaxis=dict(title="BPM", side="left"),
-        yaxis2=dict(title="Resp/min", overlaying="y", side="right", showgrid=False),
-        yaxis3=dict(title="Temp Δ", overlaying="y", side="right", position=1.05),
-        legend=dict(x=0.01, y=1),
-        margin=dict(l=50, r=80, t=50, b=50)
-    )
+if "respiratory_rate" in df_all.columns:
+    fig_combo.add_trace(go.Scatter(x=df_all["date"], y=df_all["respiratory_rate"],
+                                   mode='lines+markers', name="Resp/min", yaxis="y1"))
 
-    st.plotly_chart(fig_combo, use_container_width=True)
-else:
-    st.info("No hay datos suficientes para graficar HR + Respiraciones + Temperatura.")
+# Temperatura (eje Y2 separado)
+if "temperature_deviation" in df_all.columns:
+    fig_combo.add_trace(go.Scatter(x=df_all["date"], y=df_all["temperature_deviation"],
+                                   mode='lines+markers', name="Temp Δ (°C)", yaxis="y2"))
+
+# Layout con doble eje
+fig_combo.update_layout(
+    title="📊 HR, Respiraciones y Temperatura Nocturna",
+    xaxis=dict(title="Fecha"),
+    yaxis=dict(title="BPM / Resp/min", side="left"),
+    yaxis2=dict(title="Temp Δ (°C)", overlaying="y", side="right", showgrid=False),
+    legend=dict(x=0.01, y=1),
+    margin=dict(l=50, r=80, t=50, b=50)
+)
+
+st.plotly_chart(fig_combo, use_container_width=True)
