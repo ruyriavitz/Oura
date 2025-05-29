@@ -1,65 +1,48 @@
-import streamlit as st
-import requests
-import pandas as pd
-import plotly.express as px
+import plotly.graph_objects as go
 
-st.set_page_config(page_title="Oura Dashboard", layout="wide")
-st.title("📿 Dashboard Personal – Oura Ring")
+st.subheader("🧠 Ritmo cardíaco, Respiración y Temperatura")
 
-# --- Secretos ---
-token = st.secrets["oura"]["token"]
-
-headers = {"Authorization": f"Bearer {token}"}
-
-# --- Datos diarios ---
-st.subheader("📅 Resumen Diario (Sleep, Readiness, Actividad)")
-summary_url = "https://api.ouraring.com/v2/usercollection/daily_summary"
-summary_response = requests.get(summary_url, headers=headers)
-
-if summary_response.status_code == 200:
-    data = summary_response.json().get("data", [])
-    df = pd.DataFrame(data)
-    df["day"] = pd.to_datetime(df["day"])
-
-    st.dataframe(df[["day", "sleep_score", "readiness_score", "activity_score"]].set_index("day"))
-
-    fig = px.line(df, x="day", y=["sleep_score", "readiness_score", "activity_score"],
-                  title="📊 Scores diarios")
-    st.plotly_chart(fig, use_container_width=True)
+# HR data (alta frecuencia)
+if "df_hr" in locals() and not df_hr.empty:
+    # Daily averages for HR
+    df_hr["date"] = df_hr["timestamp"].dt.date
+    df_hr_daily = df_hr.groupby("date")["bpm"].mean().reset_index()
+    df_hr_daily["date"] = pd.to_datetime(df_hr_daily["date"])
 else:
-    st.error("No se pudo obtener resumen diario.")
+    df_hr_daily = pd.DataFrame(columns=["date", "bpm"])
 
-# --- SPO2 ---
-st.subheader("🫁 SPO2 Nocturno")
-spo2_url = "https://api.ouraring.com/v2/usercollection/spo2"
-spo2_response = requests.get(spo2_url, headers=headers)
+# Respiración y temperatura (del daily summary)
+try:
+    df_extra = df[["day", "respiratory_rate", "temperature_deviation"]].dropna()
+    df_extra.rename(columns={"day": "date"}, inplace=True)
+except Exception as e:
+    st.warning("No se pudo obtener respiración o temperatura")
+    st.text(str(e))
+    df_extra = pd.DataFrame(columns=["date", "respiratory_rate", "temperature_deviation"])
 
-if spo2_response.status_code == 200:
-    spo2_data = spo2_response.json().get("data", [])
-    if spo2_data:
-        df_spo2 = pd.DataFrame(spo2_data)
-        df_spo2["day"] = pd.to_datetime(df_spo2["day"])
-        fig_spo2 = px.line(df_spo2, x="day", y="average",
-                           title="📈 SPO2 promedio durante el sueño")
-        st.plotly_chart(fig_spo2, use_container_width=True)
-    else:
-        st.info("No hay datos de SPO2 disponibles.")
-else:
-    st.warning("No se pudo obtener SPO2.")
+# Unimos
+df_all = pd.merge(df_hr_daily, df_extra, on="date", how="outer").sort_values("date")
 
-# --- FC (solo Gen 3) ---
-st.subheader("❤️ Frecuencia Cardíaca (Gen 3)")
-hr_url = "https://api.ouraring.com/v2/usercollection/heartrate"
-hr_response = requests.get(hr_url, headers=headers)
+# Gráfico multieje
+fig = go.Figure()
 
-if hr_response.status_code == 200:
-    hr_data = hr_response.json().get("data", [])
-    if hr_data:
-        df_hr = pd.DataFrame(hr_data)
-        df_hr["timestamp"] = pd.to_datetime(df_hr["timestamp"])
-        fig_hr = px.line(df_hr, x="timestamp", y="bpm", title="📉 Frecuencia Cardíaca (BPM)")
-        st.plotly_chart(fig_hr, use_container_width=True)
-    else:
-        st.info("No hay datos de FC disponibles.")
-else:
-    st.warning("No se pudo obtener frecuencia cardíaca.")
+fig.add_trace(go.Scatter(x=df_all["date"], y=df_all["bpm"],
+                         mode='lines+markers', name="BPM", yaxis="y1"))
+
+fig.add_trace(go.Scatter(x=df_all["date"], y=df_all["respiratory_rate"],
+                         mode='lines+markers', name="Resp/min", yaxis="y2"))
+
+fig.add_trace(go.Scatter(x=df_all["date"], y=df_all["temperature_deviation"],
+                         mode='lines+markers', name="Temp Δ (°C)", yaxis="y3"))
+
+fig.update_layout(
+    title="📊 HR, Respiraciones y Temperatura Nocturna",
+    xaxis=dict(title="Fecha"),
+    yaxis=dict(title="BPM", side="left"),
+    yaxis2=dict(title="Resp/min", overlaying="y", side="right", showgrid=False),
+    yaxis3=dict(title="Temp Δ", overlaying="y", side="right", position=1.05),
+    legend=dict(x=0.01, y=1),
+    margin=dict(l=50, r=80, t=50, b=50)
+)
+
+st.plotly_chart(fig, use_container_width=True)
