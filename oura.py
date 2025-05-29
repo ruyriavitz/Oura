@@ -11,6 +11,15 @@ st.title("📿 Dashboard Personal – Oura Ring")
 token = st.secrets["oura"]["token"]
 headers = {"Authorization": f"Bearer {token}"}
 
+
+# Convertimos timestamp a hora Argentina
+if not df_hr.empty:
+    df_hr["timestamp"] = pd.to_datetime(df_hr["timestamp"]) - timedelta(hours=3)
+    fig_hr = px.line(df_hr, x="timestamp", y="bpm", title="📈 HR en Hora Argentina (UTC-3)")
+    st.plotly_chart(fig_hr, use_container_width=True)
+else:
+    st.info("No hay datos de HR disponibles.")
+
 # --- DAILY SUMMARY ---
 st.subheader("📆 Resumen Diario (Sleep, Readiness, Actividad)")
 summary_url = "https://api.ouraring.com/v2/usercollection/daily_summary"
@@ -65,40 +74,14 @@ if not df_hr.empty:
 else:
     df_hr_daily = pd.DataFrame(columns=["date", "bpm"])
 
-# Respiración y temperatura
-try:
-    df_extra = df[["day", "respiratory_rate", "temperature_deviation"]].dropna()
-    df_extra.rename(columns={"day": "date"}, inplace=True)
-except:
-    df_extra = pd.DataFrame(columns=["date", "respiratory_rate", "temperature_deviation"])
+# Respiración y temperatura diaria
+if not df.empty and "respiratory_rate" in df.columns:
+    tabla_extra = df[["day", "respiratory_rate", "temperature_deviation"]].dropna()
+    tabla_extra["day"] = pd.to_datetime(tabla_extra["day"])
+    tabla_extra = tabla_extra.sort_values("day", ascending=False)
+    tabla_extra.columns = ["Fecha", "Resp/min", "Temp Δ (°C)"]
 
-# Unir y graficar
-df_all = pd.merge(df_hr_daily, df_extra, on="date", how="outer").sort_values("date")
-
-fig_combo = go.Figure()
-
-# BPM y Respiración (eje Y1)
-if "bpm" in df_all.columns:
-    fig_combo.add_trace(go.Scatter(x=df_all["date"], y=df_all["bpm"],
-                                   mode='lines+markers', name="BPM", yaxis="y1"))
-
-if "respiratory_rate" in df_all.columns:
-    fig_combo.add_trace(go.Scatter(x=df_all["date"], y=df_all["respiratory_rate"],
-                                   mode='lines+markers', name="Resp/min", yaxis="y1"))
-
-# Temperatura (eje Y2 separado)
-if "temperature_deviation" in df_all.columns:
-    fig_combo.add_trace(go.Scatter(x=df_all["date"], y=df_all["temperature_deviation"],
-                                   mode='lines+markers', name="Temp Δ (°C)", yaxis="y2"))
-
-# Layout con doble eje
-fig_combo.update_layout(
-    title="📊 HR, Respiraciones y Temperatura Nocturna",
-    xaxis=dict(title="Fecha"),
-    yaxis=dict(title="BPM / Resp/min", side="left"),
-    yaxis2=dict(title="Temp Δ (°C)", overlaying="y", side="right", showgrid=False),
-    legend=dict(x=0.01, y=1),
-    margin=dict(l=50, r=80, t=50, b=50)
-)
-
-st.plotly_chart(fig_combo, use_container_width=True)
+    st.subheader("📋 Tabla diaria – Respiración y Temperatura")
+    st.dataframe(tabla_extra.set_index("Fecha"), use_container_width=True)
+else:
+    st.info("No hay datos de respiración o temperatura disponibles.")
